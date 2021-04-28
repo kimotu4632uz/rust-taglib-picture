@@ -16,7 +16,7 @@
 #include <taglib/asffile.h>
 #include <taglib/asfpicture.h>
 
-#include "lib.h"
+#include "taglib_c_picture.h"
 
 namespace {
     const std::tuple<const char *, TagLib::MP4::CoverArt::Format> mimedict[] = {
@@ -63,7 +63,7 @@ void taglib_picture_free_file(TagLib_File *file) {
     delete reinterpret_cast<TagLib::File *>(file);
 }
 
-Picture *taglib_picture_read_cover(TagLib_File *file) {
+Picture taglib_picture_read_cover(TagLib_File *file) {
     auto pFileR = reinterpret_cast<TagLib::File *>(file);
     auto pTagR = pFileR->tag();
 //    auto pTagR  = audio.tag();
@@ -72,27 +72,23 @@ Picture *taglib_picture_read_cover(TagLib_File *file) {
     TagLib::Ogg::XiphComment* xc    = nullptr;
 
     if (auto pFile = dynamic_cast<TagLib::MPEG::File*>(pFileR); pFile != nullptr) {
-        if (!pFile->hasID3v2Tag()) { return NULL; }
+        if (!pFile->hasID3v2Tag()) { return Picture{NULL, NULL}; }
         id3v2 = pFile->ID3v2Tag();
 
     } else if (auto pFile = dynamic_cast<TagLib::MP4::File*>(pFileR); pFile != nullptr) {
         auto tag = pFile->tag();
-        if (!tag->contains("covr")) { return NULL; }
+        if (!tag->contains("covr")) { return Picture{NULL, NULL}; }
         auto coverL = tag->item("covr").toCoverArtList();
 
-        if (coverL.isEmpty()) { return NULL; }
+        if (coverL.isEmpty()) { return Picture{NULL, NULL}; }
         auto data = coverL[0].data();
         auto mime = getmime(coverL[0].format());
 
-        auto result = (Picture *)malloc(sizeof(Picture));
-        if (result == NULL) {
-            return NULL;
-        } else {
-            result->data = data.data();
-            savedByteVectors.push_back(data);
-            result->mimetype = mime;
-            return result;
-        }
+        savedByteVectors.push_back(data);
+        auto mime_str = stringToCharArray(mime);
+        savedStrings.push_back(mime_str);
+
+        return Picture{data.data(), mime_str};
 
     } else if (auto pFile = dynamic_cast<TagLib::FLAC::File*>(pFileR); pFile != nullptr) {
         if (pFile->hasID3v2Tag()) { id3v2 = pFile->ID3v2Tag(); }
@@ -100,64 +96,79 @@ Picture *taglib_picture_read_cover(TagLib_File *file) {
 
     } else if (auto pFile = dynamic_cast<TagLib::ASF::File*>(pFileR); pFile != nullptr) {
         auto attrL = pFile->tag()->attribute("WM/Picture");
-        if (attrL.isEmpty()) { return NULL; }
+        if (attrL.isEmpty()) { return Picture{NULL, NULL}; }
         auto pic = attrL[0].toPicture();
 
-        data = pic.picture();
-        mime = pic.mimeType();
         auto result = (Picture *)malloc(sizeof(Picture));
         if (result == NULL) {
-            return NULL;
+            return Picture{NULL, NULL};
         } else {
+            auto data = pic.picture();
+            auto mime = pic.mimeType();
+
             result->data = data.data();
             savedByteVectors.push_back(data);
-            result->mimetype = mime;
+
+            auto mime_str = stringToCharArray(mime);
+            result->mimetype = mime_str;
+            savedStrings.push_back(mime_str);
+
             return result;
         }
 
-    } else { return NULL; }
+    } else { return Picture{NULL, NULL}; }
 
     if (id3v2 == nullptr) { id3v2 = dynamic_cast<TagLib::ID3v2::Tag*>(pTagR); }
     if (xc == nullptr) { xc = dynamic_cast<TagLib::Ogg::XiphComment*>(pTagR); }
 
     if (id3v2 != nullptr) {
         auto frameL = id3v2->frameList("APIC");
-        if(frameL.isEmpty()) { return 2; }
+        if(frameL.isEmpty()) { return Picture{NULL, NULL}; }
         auto cover = dynamic_cast<TagLib::ID3v2::AttachedPictureFrame*>(frameL[0]);
 
-        data = cover->picture();
-        mime = cover->mimeType();
         auto result = (Picture *)malloc(sizeof(Picture));
         if (result == NULL) {
-            return NULL;
+            return Picture{NULL, NULL};
         } else {
+            auto data = cover->picture();
+            auto mime = cover->mimeType();
+
             result->data = data.data();
             savedByteVectors.push_back(data);
-            result->mimetype = mime;
+
+            auto mime_str = stringToCharArray(mime);
+            result->mimetype = mime_str;
+            savedStrings.push_back(mime_str);
+
             return result;
         }
 
     } else if (xc != nullptr) {
-        if(xc->pictureList().isEmpty()) { return 1; }
+        if(xc->pictureList().isEmpty()) { return Picture{NULL, NULL}; }
 
         auto pic = xc->pictureList()[0];
-        data = pic->data();
-        mime = pic->mimeType();
         auto result = (Picture *)malloc(sizeof(Picture));
         if (result == NULL) {
-            return NULL;
+            return Picture{NULL, NULL};
         } else {
+            auto data = pic->data();
+            auto mime = pic->mimeType();
+
             result->data = data.data();
             savedByteVectors.push_back(data);
-            result->mimetype = mime;
+
+            auto mime_str = stringToCharArray(mime);
+            result->mimetype = mime_str;
+            savedStrings.push_back(mime_str);
+
             return result;
         }
 
     }
-    return NULL;
+    return Picture{NULL, NULL};
 }
 
-void taglib_picture_write_cover(TagLib_File *file, Picture *picture) {
+void taglib_picture_write_cover(TagLib_File *file, Picture picture) {
     auto pFileR = reinterpret_cast<TagLib::File *>(file);
 
     TagLib::ID3v2::Tag*       id3v2 = nullptr;
