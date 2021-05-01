@@ -5,6 +5,11 @@ use std::os::raw::c_char;
 use image::GenericImageView;
 
 use taglib_picture_sys as taglib;
+pub mod error;
+use error::{Error, TagLibError};
+
+use std::result::Result as StdResult;
+type Result<T> = StdResult<T, Error>;
 
 pub struct File {
     inner: *mut taglib::TagLib_File,
@@ -17,18 +22,23 @@ impl Drop for File {
 }
 
 impl File {
-    pub fn new<P: AsRef<Path>>(filename: P) -> File {
+    pub fn new<P: AsRef<Path>>(filename: P) -> Result<File> {
         let filename = filename.as_ref().to_str().unwrap();
         let c_str = CString::new(filename).unwrap();
         let c_str_ptr = c_str.as_ptr();
 
-        File { inner: unsafe { taglib::taglib_picture_open_file(c_str_ptr) } }
+        let inner = unsafe { taglib::taglib_picture_open_file(c_str_ptr) };
+        if inner.is_null() {
+            Err(Error::InvalidFileName)
+        } else {
+            Ok(File { inner: inner })
+        }
     }
 
-    pub fn read_cover(&self) -> anyhow::Result<(Vec<u8>, String)> {
+    pub fn read_cover(&self) -> Result<(Vec<u8>, String)> {
         let result = unsafe { taglib::taglib_picture_read_cover(self.inner) };
         if result.status_code != 0 {
-            anyhow::bail!("could not read picture from file\nError code: {}\n", result.status_code)
+            Err(Error::TagLibError(TagLibError::from_status_code(result.status_code)))
         } else {
             let data = unsafe {
                 let u8_ptr = result.data as *const u8;
@@ -46,14 +56,14 @@ impl File {
             let mut mime_vec = Vec::with_capacity(mime_slice.len());
             mime_vec.resize(mime_slice.len(), 0);
             mime_vec.clone_from_slice(mime_slice);
-            let mime_string = String::from_utf8(mime_vec)?;
+            let mime_string = String::from_utf8(mime_vec).map_err(|e| e.utf8_error())?;
             unsafe { taglib::taglib_picture_free_strs() };
 
             Ok((data_copy, mime_string))
         }
     }
 
-    pub fn write_cover<U: AsRef<[u8]>, S: Into<Vec<u8>>>(&self, data: U, mimetype: S) -> anyhow::Result<()> {
+    pub fn write_cover<U: AsRef<[u8]>, S: Into<Vec<u8>>>(&self, data: U, mimetype: S) -> Result<()> {
         let data = data.as_ref();
 
         let image = image::load_from_memory(data)?;
@@ -81,6 +91,7 @@ impl File {
                 height: height as i32,
                 depth: depth
             }) };
+
         Ok(())
     }
 }

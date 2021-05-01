@@ -139,7 +139,9 @@ Picture taglib_picture_read_cover(TagLib_File *file) {
 
         return Picture{0, data_ptr, data_len, mime_ptr};
 
-    } else { return Picture{91, NULL, 0, NULL}; }
+    } else {
+        return Picture{91, NULL, 0, NULL};
+    }
 
     if (id3v2 == nullptr) { id3v2 = dynamic_cast<TagLib::ID3v2::Tag*>(pTagR); }
     if (xc == nullptr) { xc = dynamic_cast<TagLib::Ogg::XiphComment*>(pTagR); }

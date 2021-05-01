@@ -1,6 +1,6 @@
 [package]
 name = "taglib_picture"
-version = "0.1.0"
+version = "0.2.1"
 authors = ["kimotu4632uz <32472396+kimotu4632uz@users.noreply.github.com>"]
 edition = "2018"
 
@@ -8,5 +8,6 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0.40"
+thiserror = "1.0.24"
 image = "0.23.14"
 taglib_picture-sys = { path = "./taglib_picture-sys" }
